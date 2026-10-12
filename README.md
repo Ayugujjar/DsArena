@@ -108,6 +108,43 @@ Now open **http://localhost:5173** in your browser.
 
 ---
 
+### 4. Deploy Frontend and Backend as Separate Vercel Projects
+
+Push the repository to GitHub and create two Vercel projects from it:
+
+1. **Frontend project:** set **Root Directory** to `frontend`, **Build Command** to `npm run build`, and **Output Directory** to `dist`. The `frontend/vercel.json` rewrite supports refreshing React routes.
+2. **Backend project:** set **Root Directory** to `backend`. Vercel detects the Express application exported by `server.js`; `backend/vercel.json` configures the daily scheduled sync endpoint.
+
+Vercel deployment protection must not require interactive Vercel sign-in on the production backend deployment. The API is accessed by the browser and must be publicly reachable; application authentication, CORS, rate limits, and the cron bearer secret protect its routes. Keep preview deployments protected if desired.
+
+Set these backend environment variables in Vercel's **Production** environment (never commit their values):
+
+```text
+NODE_ENV=production
+MONGO_URI=<MongoDB Atlas connection string>
+JWT_SECRET=<random secret, at least 32 characters>
+ADMIN_JWT_SECRET=<different random secret, at least 32 characters>
+CRON_SECRET=<different random secret, at least 32 characters>
+FRONTEND_URL=https://YOUR-FRONTEND-PROJECT.vercel.app
+TRUST_PROXY_HOPS=1
+```
+
+Use a cloud MongoDB URI reachable from Vercel; the local `127.0.0.1` database cannot be accessed by a deployed project. Set `FRONTEND_URL` to the exact frontend origin, without a trailing slash. Comma-separate additional exact origins only when you need to trust them.
+
+In the frontend project's **Production** environment, set:
+
+```text
+VITE_API_URL=https://YOUR-BACKEND-PROJECT.vercel.app/api
+```
+
+The API base URL must use HTTPS and end in `/api`. `VITE_*` values are included in the browser bundle and must never contain credentials or secrets. Redeploy both projects after changing environment values.
+
+Vercel Cron invokes `GET /api/cron/sync` using the `CRON_SECRET` bearer token. The included schedule is daily at 02:00 UTC; Vercel Hobby plans only allow once-daily cron schedules. If you change the schedule, follow the limits of your Vercel plan. The scheduled sync runs in a serverless function, so large student populations may exceed function duration limits; use a queue or a dedicated worker for larger deployments. SMTP settings and `ADMIN_SETUP_EMAIL` are backend-only variables needed for admin bootstrap, password resets, and invitations. Production session cookies are secure cross-site cookies because the frontend and API use separate Vercel domains.
+
+After deployment, verify `https://YOUR-BACKEND-PROJECT.vercel.app/api/health` returns JSON rather than a Vercel sign-in page, then test student registration/login and admin login from the frontend URL.
+
+---
+
 ## 📡 REST API Reference
 
 ### Student Authentication

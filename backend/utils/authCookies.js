@@ -22,16 +22,20 @@ const hasAllowedOrigin = (req) => {
 };
 
 const setSessionCookie = (res, name, token) => {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const production = process.env.NODE_ENV === 'production';
+  const secure = production ? '; Secure' : '';
+  const sameSite = production ? 'None' : 'Strict';
   res.append(
     'Set-Cookie',
-    `${name}=${token}; HttpOnly; Path=/api; SameSite=Strict; Max-Age=${SESSION_DURATION_SECONDS}${secure}`
+    `${name}=${token}; HttpOnly; Path=/api; SameSite=${sameSite}; Max-Age=${SESSION_DURATION_SECONDS}${secure}`
   );
 };
 
 const clearSessionCookie = (res, name) => {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.append('Set-Cookie', `${name}=; HttpOnly; Path=/api; SameSite=Strict; Max-Age=0${secure}`);
+  const production = process.env.NODE_ENV === 'production';
+  const secure = production ? '; Secure' : '';
+  const sameSite = production ? 'None' : 'Strict';
+  res.append('Set-Cookie', `${name}=; HttpOnly; Path=/api; SameSite=${sameSite}; Max-Age=0${secure}`);
 };
 
 module.exports = {

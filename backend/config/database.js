@@ -1,6 +1,14 @@
 const mongoose = require('mongoose');
+let connectionPromise = null;
 
 const connectDB = async () => {
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
+  }
+  if (connectionPromise) {
+    return connectionPromise;
+  }
+
   const isProduction = process.env.NODE_ENV === 'production';
   const uri = process.env.MONGO_URI || (!isProduction ? 'mongodb://127.0.0.1:27017/dsa_tracker' : null);
   if (!uri) {
@@ -12,15 +20,20 @@ const connectDB = async () => {
     throw new Error('MONGO_MAX_POOL_SIZE must be an integer between 1 and 100');
   }
 
-  const conn = await mongoose.connect(uri, {
+  connectionPromise = mongoose.connect(uri, {
     autoIndex: !isProduction,
     maxPoolSize,
     minPoolSize: 0,
     serverSelectionTimeoutMS: 10_000,
     ...(isProduction ? { tls: true } : {}),
   });
-  console.log(`[MongoDB] Connected: ${conn.connection.host}/${conn.connection.name}`);
-  return conn;
+  try {
+    const conn = await connectionPromise;
+    console.log(`[MongoDB] Connected: ${conn.connection.host}/${conn.connection.name}`);
+    return conn;
+  } finally {
+    connectionPromise = null;
+  }
 };
 
 module.exports = connectDB;

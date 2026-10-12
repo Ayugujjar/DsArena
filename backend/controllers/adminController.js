@@ -370,8 +370,8 @@ const getSystemHealth = async (req, res, next) => {
           geeksforgeeks: { ...gfgHealth, endpoint: 'https://www.geeksforgeeks.org/' },
         },
         scheduler: {
-          cronSchedule: process.env.CRON_SCHEDULE || '0 */6 * * *',
-          status: isProgressCronActive() ? 'Active' : 'Inactive',
+          cronSchedule: process.env.VERCEL ? '0 2 * * * (Vercel Cron)' : process.env.CRON_SCHEDULE || '0 */6 * * *',
+          status: process.env.VERCEL ? 'Managed by Vercel Cron' : isProgressCronActive() ? 'Active' : 'Inactive',
         },
         telemetry: {
           failedSyncCount: failedCount,

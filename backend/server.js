@@ -2,10 +2,12 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const connectDB = require('./config/database');
 const { initProgressCron } = require('./jobs/updateStudentProgress');
+const progressService = require('./services/progressService');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 // Route imports
@@ -33,7 +35,7 @@ const frontendOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
   .filter(Boolean);
 
 if (isProduction) {
-  for (const secretName of ['JWT_SECRET', 'ADMIN_JWT_SECRET']) {
+  for (const secretName of ['JWT_SECRET', 'ADMIN_JWT_SECRET', 'CRON_SECRET']) {
     const secret = process.env[secretName];
     if (!secret || secret.length < 32 || secret.startsWith('replace-with-')) {
       throw new Error(`${secretName} must contain at least 32 characters in production`);
@@ -133,6 +135,39 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+app.get('/api/cron/sync', async (req, res, next) => {
+  const expectedToken = process.env.CRON_SECRET;
+  const authorization = req.headers.authorization || '';
+  const suppliedToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+  const expectedBytes = Buffer.from(expectedToken || '');
+  const suppliedBytes = Buffer.from(suppliedToken);
+  if (!expectedToken || suppliedBytes.length !== expectedBytes.length ||
+      !crypto.timingSafeEqual(suppliedBytes, expectedBytes)) {
+    return res.status(expectedToken ? 401 : 503).json({
+      success: false,
+      message: expectedToken ? 'Unauthorized scheduled sync request' : 'Scheduled sync is not configured',
+    });
+  }
+
+  try {
+    await connectDB();
+    const results = await progressService.syncAllStudents();
+    const updated = results.filter((result) => result.success).length;
+    res.status(200).json({
+      success: true,
+      attempted: results.length,
+      updated,
+      failed: results.length - updated,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.use('/api', (req, res, next) => {
+  connectDB().then(() => next()).catch(next);
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin/auth', adminAuthRoutes);
@@ -158,7 +193,9 @@ const startServer = async () => {
   await connectDB();
   const server = app.listen(PORT, () => {
     console.log(`[Server] DsArena Backend running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-    initProgressCron();
+    if (process.env.NODE_ENV !== 'production') {
+      initProgressCron();
+    }
   });
   return server;
 };
@@ -170,4 +207,5 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, startServer };
+module.exports = app;
+module.exports.startServer = startServer;
